@@ -3,8 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Barkod Okuyucu ve Ürün Bilgisi</title>
+    <title>Barkod ve QR Okuyucu</title>
     <script src="https://unpkg.com/quagga@0.12.1/dist/quagga.min.js"></script>
+    <script src="https://cdn.rawgit.com/nayuki/QR-Code-generator/master/js/qrgen.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
     <style>
         body { font-family: Arial, sans-serif; text-align: center; }
         #video-container { width: 100%; height: 300px; background-color: #000; margin-bottom: 20px; }
@@ -51,12 +53,13 @@
     </style>
 </head>
 <body>
-    <h1>Barkod Okuyucu ve Ürün Bilgisi</h1>
+    <h1>Barkod ve QR Okuyucu</h1>
 
     <!-- Sekmeler -->
     <div class="tabs">
         <button class="tab active" onclick="showTab('scanner')">Barkod Tarayıcı</button>
         <button class="tab" onclick="showTab('manual')">Manuel Barkod Girişi</button>
+        <button class="tab" onclick="showTab('qrscanner')">QR Kod Tarayıcı</button>
     </div>
 
     <!-- Barkod Tarayıcı Sekmesi -->
@@ -64,31 +67,11 @@
         <div id="video-container">
             <video id="video" width="100%" height="100%" autoplay></video>
         </div>
-
         <div>
             <label for="barcode">Barkod:</label>
             <input type="text" id="barcode" readonly placeholder="Barkod burada görünecek">
         </div>
-
-        <div>
-            <label for="material">Ürün Malzemesi:</label>
-            <input type="text" id="material" placeholder="Ürün malzemesini girin">
-        </div>
-
-        <div>
-            <label for="price">Fiyat:</label>
-            <input type="number" id="price" placeholder="Fiyatı girin" min="0" step="0.01">
-        </div>
-
-        <div>
-            <label for="manufacturer">Üretici Bilgisi:</label>
-            <input type="text" id="manufacturer" placeholder="Üretici adını girin">
-        </div>
-
-        <div id="product-info">
-            <button onclick="saveProductInfo()">Ürün Bilgilerini Kaydet</button>
-            <p id="product-status"></p>
-        </div>
+        <button onclick="saveProductInfo()">Ürün Bilgilerini Kaydet</button>
     </div>
 
     <!-- Manuel Barkod Girişi Sekmesi -->
@@ -97,38 +80,19 @@
             <label for="manual-barcode">Barkod:</label>
             <input type="text" id="manual-barcode" placeholder="Manuel barkod girin">
         </div>
-
-        <div>
-            <label for="manual-material">Ürün Malzemesi:</label>
-            <input type="text" id="manual-material" placeholder="Ürün malzemesini girin">
-        </div>
-
-        <div>
-            <label for="manual-price">Fiyat:</label>
-            <input type="number" id="manual-price" placeholder="Fiyatı girin" min="0" step="0.01">
-        </div>
-
-        <div>
-            <label for="manual-manufacturer">Üretici Bilgisi:</label>
-            <input type="text" id="manual-manufacturer" placeholder="Üretici adını girin">
-        </div>
-
         <button onclick="saveManualProductInfo()">Ürün Bilgilerini Kaydet</button>
     </div>
 
-    <!-- Ürün Arama -->
-    <div style="margin-top:40px;">
-        <label for="searchName">Üretici adına göre ara:</label>
-        <input type="text" id="searchName" placeholder="Üretici adı yazın">
-        <button onclick="searchByManufacturer()">Ara</button>
-    </div>
-
-    <div id="search-results"></div>
-
-    <!-- Ürünler Listesi -->
-    <div style="margin-top:40px;">
-        <h3>Kaydedilen Ürünler</h3>
-        <div id="product-list"></div>
+    <!-- QR Kod Tarayıcı Sekmesi -->
+    <div id="qrscanner" class="tab-content">
+        <div id="qr-video-container">
+            <video id="qr-video" width="100%" height="100%" autoplay></video>
+        </div>
+        <div>
+            <label for="qr-code">QR Kodu:</label>
+            <input type="text" id="qr-code" readonly placeholder="QR kodu burada görünecek">
+        </div>
+        <button onclick="saveQRInfo()">QR Bilgilerini Kaydet</button>
     </div>
 
     <script>
@@ -159,9 +123,39 @@
 
                 Quagga.onDetected(function(result) {
                     document.getElementById('barcode').value = result.codeResult.code;
-                    // Barkod okunduğunda ürün bilgilerini göster
-                    displayProductInfo(result.codeResult.code);
                 });
+            }).catch(function(err) {
+                console.error('Kamera erişimi sağlanamadı: ', err);
+                alert('Kamera erişimi sağlanamadı! Lütfen tarayıcı izinlerini kontrol edin.');
+            });
+        }
+
+        function startQRScanner() {
+            navigator.mediaDevices.getUserMedia({
+                video: { facingMode: "environment" }
+            }).then(function(stream) {
+                var videoElement = document.querySelector('#qr-video');
+                videoElement.srcObject = stream;
+
+                function scanQRCode() {
+                    const canvas = document.createElement('canvas');
+                    const context = canvas.getContext('2d');
+                    canvas.height = videoElement.videoHeight;
+                    canvas.width = videoElement.videoWidth;
+                    context.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+
+                    const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+                    const code = jsQR(imageData.data, canvas.width, canvas.height);
+
+                    if (code) {
+                        document.getElementById('qr-code').value = code.data;
+                        videoElement.pause();  // QR kod okunduktan sonra video duraklatılır.
+                    } else {
+                        requestAnimationFrame(scanQRCode);
+                    }
+                }
+
+                scanQRCode();  // QR kod taramasını başlat.
             }).catch(function(err) {
                 console.error('Kamera erişimi sağlanamadı: ', err);
                 alert('Kamera erişimi sağlanamadı! Lütfen tarayıcı izinlerini kontrol edin.');
@@ -170,122 +164,45 @@
 
         function saveProductInfo() {
             const barcode = document.getElementById('barcode').value;
-            const material = document.getElementById('material').value;
-            const price = document.getElementById('price').value;
-            const manufacturer = document.getElementById('manufacturer').value;
-
-            if (!barcode || !material || !price || !manufacturer) {
-                alert("Lütfen tüm bilgileri girin!");
-                return;
+            if (barcode) {
+                console.log(`Barkod kaydedildi: ${barcode}`);
             }
-
-            const productData = { barcode, material, price, manufacturer };
-            let products = JSON.parse(localStorage.getItem('products')) || [];
-            products.push(productData);
-            localStorage.setItem('products', JSON.stringify(products));
-
-            document.getElementById('product-status').innerHTML = `Ürün Bilgileri Kaydedildi: <br>
-                Barkod: ${barcode} <br> Malzeme: ${material} <br> Fiyat: ${price} TL <br> Üretici: ${manufacturer}`;
-
-            // Giriş alanlarını sıfırla
-            document.getElementById('material').value = '';
-            document.getElementById('price').value = '';
-            document.getElementById('manufacturer').value = '';
-
-            displayProductList(); // Ürün listesi güncelle
         }
 
         function saveManualProductInfo() {
-            const barcode = document.getElementById('manual-barcode').value;
-            const material = document.getElementById('manual-material').value;
-            const price = document.getElementById('manual-price').value;
-            const manufacturer = document.getElementById('manual-manufacturer').value;
-
-            if (!barcode || !material || !price || !manufacturer) {
-                alert("Lütfen tüm bilgileri girin!");
-                return;
+            const manualBarcode = document.getElementById('manual-barcode').value;
+            if (manualBarcode) {
+                console.log(`Manuel barkod kaydedildi: ${manualBarcode}`);
             }
+        }
 
-            const productData = { barcode, material, price, manufacturer };
-            let products = JSON.parse(localStorage.getItem('products')) || [];
-            products.push(productData);
-            localStorage.setItem('products', JSON.stringify(products));
-
-            document.getElementById('product-status').innerHTML = `Ürün Bilgileri Kaydedildi: <br>
-                Barkod: ${barcode} <br> Malzeme: ${material} <br> Fiyat: ${price} TL <br> Üretici: ${manufacturer}`;
-
-            // Giriş alanlarını sıfırla
-            document.getElementById('manual-barcode').value = '';
-            document.getElementById('manual-material').value = '';
-            document.getElementById('manual-price').value = '';
-            document.getElementById('manual-manufacturer').value = '';
-
-            displayProductList(); // Ürün listesi güncelle
+        function saveQRInfo() {
+            const qrCode = document.getElementById('qr-code').value;
+            if (qrCode) {
+                console.log(`QR kod kaydedildi: ${qrCode}`);
+            }
         }
 
         function showTab(tabName) {
-            // Tüm sekme içeriklerini gizle
             const tabs = document.querySelectorAll('.tab-content');
             tabs.forEach(tab => tab.classList.remove('active'));
 
-            // Seçilen sekme içeriğini göster
             const tabLinks = document.querySelectorAll('.tab');
             tabLinks.forEach(tab => tab.classList.remove('active'));
 
             document.getElementById(tabName).classList.add('active');
             const activeTab = document.querySelector(`.tab[onclick="showTab('${tabName}')"]`);
             activeTab.classList.add('active');
-        }
 
-        function displayProductList() {
-            const products = JSON.parse(localStorage.getItem('products')) || [];
-            const productListDiv = document.getElementById('product-list');
-            productListDiv.innerHTML = '';
-
-            if (products.length === 0) {
-                productListDiv.innerHTML = `<p>Henüz ürün kaydedilmedi.</p>`;
-                return;
-            }
-
-            products.forEach((product, index) => {
-                const productDiv = document.createElement('div');
-                productDiv.classList.add('product');
-                productDiv.innerHTML = `
-                    <strong>Ürün ${index + 1}:</strong><br>
-                    Barkod: ${product.barcode}<br>
-                    Malzeme: ${product.material}<br>
-                    Fiyat: ${product.price} TL<br>
-                    Üretici: ${product.manufacturer}<br>
-                    <button onclick="deleteProduct(${index})">Sil</button>
-                    <button onclick="displayProductInfo('${product.barcode}')">Detayları Görüntüle</button>
-                `;
-                productListDiv.appendChild(productDiv);
-            });
-        }
-
-        function displayProductInfo(barcode) {
-            const products = JSON.parse(localStorage.getItem('products')) || [];
-            const product = products.find(p => p.barcode === barcode);
-
-            if (product) {
-                document.getElementById('barcode').value = product.barcode;
-                document.getElementById('material').value = product.material;
-                document.getElementById('price').value = product.price;
-                document.getElementById('manufacturer').value = product.manufacturer;
-            } else {
-                alert("Ürün bulunamadı!");
+            if (tabName === 'scanner') {
+                startScanner();
+            } else if (tabName === 'qrscanner') {
+                startQRScanner();
             }
         }
 
-        function deleteProduct(index) {
-            let products = JSON.parse(localStorage.getItem('products')) || [];
-            products.splice(index, 1); // Ürünü sil
-            localStorage.setItem('products', JSON.stringify(products));
-
-            displayProductList(); // Ürün listesini güncelle
-        }
-
-        function searchByManufacturer() {
-            const searchName = document.getElementById('searchName').value.toLowerCase();
-            const resultsDiv = document.getElementById('search-results');
-            resultsDiv.innerHTML =
+        // Başlangıçta Barkod tarayıcıyı başlat
+        startScanner();
+    </script>
+</body>
+</html>
